@@ -43,7 +43,7 @@
 
 #define HFRCO_FREQ 		40000000
 
-// RTOS Globals
+// RTOS Global variables
 OS_TCB startTaskTCB;
 OS_TCB idleTaskTCB;
 
@@ -51,6 +51,7 @@ CPU_STK startTaskStack[START_STACK_SIZE];
 CPU_STK idleTaskStack[IDLE_STACK_SIZE];
 
 
+/* Main */
 int main(void)
 {
 	EMU_DCDCInit_TypeDef dcdcInit = EMU_DCDCINIT_DEFAULT;
@@ -108,7 +109,8 @@ int main(void)
 	return(1);
 }
 
-//Task to create tasks used to drive LEDs and initialize kernel
+
+/* Start Task */
 void StartTask(void* p_arg) {
     RTOS_ERR  err;
 
@@ -132,8 +134,23 @@ void StartTask(void* p_arg) {
 	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
 #endif
 
+	/* Create LED Driver, Slider Input, and Button Input tasks */
+	OSTaskCreate(&LEDDriverTaskTCB,     		//Create LED driver task
+				 "LED Driver Task",
+				 LEDDriverTask,
+				 DEF_NULL,
+				 LED_DRV_TASK_PRIO,
+				 &LEDDriverTaskStack[0],
+				 (LED_DRV_STACK_SIZE / 2u),
+				 LED_DRV_STACK_SIZE,
+				 0u,
+				 0u,
+				 DEF_NULL,
+				 OS_OPT_TASK_STK_CLR,
+				 &err);
 
-    /* Create LED Driver, Slider Input, and Button Input tasks */
+	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+
     OSTaskCreate(&buttonInputTaskTCB,     		//Create button input task
 				 "Button Input Task",
 				 ButtonInputTask,
@@ -166,21 +183,7 @@ void StartTask(void* p_arg) {
 
     APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
 
-    OSTaskCreate(&LEDDriverTaskTCB,     		//Create LED driver task
-				 "LED Driver Task",
-				 LEDDriverTask,
-				 DEF_NULL,
-				 LED_DRV_TASK_PRIO,
-				 &LEDDriverTaskStack[0],
-				 (LED_DRV_STACK_SIZE / 2u),
-				 LED_DRV_STACK_SIZE,
-				 0u,
-				 0u,
-				 DEF_NULL,
-				 OS_OPT_TASK_STK_CLR,
-				 &err);
-
-    APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
+    __enable_irq();						//Global Enable Interrupts
 
     OSTaskCreate(&idleTaskTCB,     		//Create LED driver task
 				 "Idle Task",
@@ -198,11 +201,10 @@ void StartTask(void* p_arg) {
 
 	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), 1);
 
-	while(1) {
-
-	}
+	while(1);
 }
 
+/* Idle Task */
 void IdleTask(void* p_args) {
 
 	RTOS_ERR err;

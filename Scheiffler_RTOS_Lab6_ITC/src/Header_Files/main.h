@@ -20,13 +20,16 @@
 
 
 // ----- Global Variables -----
-extern OS_TCB startTaskTCB;
+extern OS_TCB startTaskTCB;							/**< Start task control block variable */
 
-extern CPU_STK startTaskStack[START_STACK_SIZE];
+extern CPU_STK startTaskStack[START_STACK_SIZE];	/**< Start task stack */
 
 // ----- Function Prototypes -----
+/// @brief Task to create all other tasks and initialize kernel
 void StartTask(void* p_args);
 
+
+/// @brief Task which is scheduled if all other tasks are blocked/waiting
 void IdleTask(void* p_args);
 
 #endif

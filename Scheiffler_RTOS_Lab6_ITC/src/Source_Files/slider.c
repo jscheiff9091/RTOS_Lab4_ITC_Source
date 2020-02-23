@@ -10,22 +10,21 @@
 #include <kernel/include/os.h>
 #include  <common/include/rtos_utils.h>
 
-SLD_SliderPressedState_t sld_rightSideState;
-SLD_SliderPressedState_t sld_leftSideState;
+//SLD_SliderPressedState_t sld_rightSideState;
+//SLD_SliderPressedState_t sld_leftSideState;
 
 OS_TCB sliderInputTaskTCB;
 CPU_STK sliderInputTaskStack[SLD_IN_STACK_SIZE];
 
+OS_SEM sliderSem;
+OS_TMR sliderTimer;
 
-//Initialize the slider and slider state variables
+/* Slider Initialize */
 void SLD_Init(void) {
 	CAPSENSE_Init();			//Enable capctive sensing slider
-
-	sld_leftSideState = SLD_IsPressed(SLD_LeftSide);
-	sld_rightSideState = SLD_IsPressed(SLD_RightSide);
 }
 
-//Check if either side of the slider is pressed
+/* Slider is Pressed? */
 SLD_SliderPressedState_t SLD_IsPressed(SLD_SliderSide_t side) {
 
 	if(side != SLD_LeftSide && side != SLD_RightSide) {
@@ -44,8 +43,8 @@ SLD_SliderPressedState_t SLD_IsPressed(SLD_SliderSide_t side) {
 	return SLD_Released;
 }
 
-//Determine action desired from the slider input
-LED_Action_t SLD_GetSLDAction(void) {
+/* Slider - Get Slider Action */
+LED_Action_t SLD_GetSLDAction(SLD_SliderPressedState_t sld_leftSideState, SLD_SliderPressedState_t sld_rightSideState) {
 	//Determine which combination of left and right side is selected (or not)
 	if(sld_leftSideState == SLD_Pressed && sld_rightSideState == SLD_Pressed) { 					//Both side selected, turn off LEDs
 		return LED_BOTH_OFF;
@@ -61,19 +60,68 @@ LED_Action_t SLD_GetSLDAction(void) {
 	}
 }
 
-// Get state of Slider every 100 ms
+/* Touch slider signal timer */
+void SLD_TimerCallback(void* p_tmr, void* p_args) {
+	RTOS_ERR err;
+
+	// Signal to slider input task to check touch slider state
+	OSSemPost(&sliderSem, OS_OPT_POST_1, &err);
+	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), ;);
+}
+
+/* Slider Input Task */
 void SliderInputTask(void * p_args) {
 
 	RTOS_ERR err;
+	CPU_TS timestamp;
+
 	SLD_Init();       	//Initialize CAPSENSE driver and set initial slider state
+	SLD_SliderPressedState_t sld_leftSideState = SLD_IsPressed(SLD_LeftSide);
+	SLD_SliderPressedState_t sld_rightSideState = SLD_IsPressed(SLD_RightSide);
+	GPIO_LEDTaskMsg_t sliderMsg;
+	sliderMsg.msgSource = SliderTaskMessage;
+
+	//Create semaphore used to signal to check the touch slider
+	OSSemCreate(&sliderSem,
+			  	"Touch Slider Signal Semaphore",
+				CNT_ZERO,
+				&err);
+	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), ;);
+
+	//Create slider value timer
+	OSTmrCreate(&sliderTimer,
+				"Periodic Slider Timer",
+				NO_DLY,
+				SLD_TIMER_CNT,
+				OS_OPT_TMR_PERIODIC,
+				&SLD_TimerCallback,
+				DEF_NULL,
+				&err);
+	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), ;);
+
+	OSTmrStart(&sliderTimer, &err);
+	APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), ;);
 
 	while(1) {
-		sld_leftSideState = SLD_IsPressed(SLD_LeftSide);   		//Update left side of slider state variable
-		sld_rightSideState = SLD_IsPressed(SLD_RightSide);		//update right side of slider state variable
+		// Wait for timer to expire and signal the touch slide to be measured
+		OSSemPend(&sliderSem, NO_TIMEOUT, OS_OPT_PEND_BLOCKING, &timestamp, &err);
 
-		OSTimeDly(SLD_IN_TIME_DLY,
-				  OS_OPT_TIME_DLY,
-				  &err);										//Delay slider input task for 100ms
+		// Update slider state variables
+		if(RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE) {
+			sld_leftSideState = SLD_IsPressed(SLD_LeftSide);   		//Update left side of slider state variable
+			sld_rightSideState = SLD_IsPressed(SLD_RightSide);		//update right side of slider state variable
+		}
+		else return;
+
+		//Update message
+		sliderMsg.ledAction = SLD_GetSLDAction(sld_leftSideState, sld_rightSideState);
+
+		//Send message to LED driver task message
+		OSQPost(&LEDTaskMsgQ,
+				(void*) &sliderMsg,
+				(OS_MSG_SIZE)sizeof(void*),
+				OS_OPT_POST_ALL,
+				&err);
 		APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), ;);
 	}
 }
