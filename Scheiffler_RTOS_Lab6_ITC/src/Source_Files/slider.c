@@ -78,8 +78,10 @@ void SliderInputTask(void * p_args) {
 	SLD_Init();       	//Initialize CAPSENSE driver and set initial slider state
 	SLD_SliderPressedState_t sld_leftSideState = SLD_IsPressed(SLD_LeftSide);
 	SLD_SliderPressedState_t sld_rightSideState = SLD_IsPressed(SLD_RightSide);
+	LED_Action_t currAction = SLD_GetSLDAction(sld_leftSideState, sld_rightSideState);
 	GPIO_LEDTaskMsg_t sliderMsg;
 	sliderMsg.msgSource = SliderTaskMessage;
+	sliderMsg.ledAction = currAction;
 
 	//Create semaphore used to signal to check the touch slider
 	OSSemCreate(&sliderSem,
@@ -113,15 +115,20 @@ void SliderInputTask(void * p_args) {
 		}
 		else return;
 
-		//Update message
-		sliderMsg.ledAction = SLD_GetSLDAction(sld_leftSideState, sld_rightSideState);
+		//Update temporary LED action variable
+		currAction = SLD_GetSLDAction(sld_leftSideState, sld_rightSideState);
 
-		//Send message to LED driver task message
-		OSQPost(&LEDTaskMsgQ,
-				(void*) &sliderMsg,
-				(OS_MSG_SIZE)sizeof(void*),
-				OS_OPT_POST_ALL,
-				&err);
-		APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), ;);
+		if(currAction != sliderMsg.ledAction) {
+			//Update LED state variable
+			sliderMsg.ledAction = currAction;
+
+			//Send message to LED driver task message
+			OSQPost(&LEDTaskMsgQ,
+					(void*) &sliderMsg,
+					(OS_MSG_SIZE)sizeof(void*),
+					OS_OPT_POST_ALL,
+					&err);
+			APP_RTOS_ASSERT_DBG((RTOS_ERR_CODE_GET(err) == RTOS_ERR_NONE), ;);
+		}
 	}
 }

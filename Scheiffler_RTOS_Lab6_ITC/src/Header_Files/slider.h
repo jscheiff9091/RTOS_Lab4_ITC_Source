@@ -24,7 +24,7 @@
 
 #define CNT_ZERO			    0
 #define NO_DLY           		0
-#define SLD_TIMER_CNT			1
+#define SLD_TIMER_CNT			2
 
 
 // ----- Typedefs ------
